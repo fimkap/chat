@@ -4,4 +4,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY chat/. ./chat/
+RUN mkdir /logs
 CMD ["python", "app.py"]
