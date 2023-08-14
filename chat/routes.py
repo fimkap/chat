@@ -3,7 +3,7 @@ from redis import Redis, RedisError
 from pydantic import ValidationError
 import time
 import json
-from .models import Message, ChatRoom
+from .models import Message, ChatRoom, User
 from .logger import logger
 
 chat_bp = Blueprint("chat", __name__)
@@ -45,9 +45,10 @@ def join_room(room_id, user_id):
         if not redis.sismember("rooms_ids", room_id):
             return jsonify({"error": "Room does not exist"}), 404
 
-        redis.sadd("room:%s:users" % room_id, user_id)
-        logger.info("User %s joined room %s" % (user_id, room_id))
-    except RedisError as e:
+        user = User(name=user_id)  # Validate user_id
+        redis.sadd("room:%s:users" % room_id, user.name)
+        logger.info("User %s joined room %s" % (user.name, room_id))
+    except (RedisError, ValidationError) as e:
         logger.error("Error joining room: %s" % e)
         return jsonify({"error": "Internal Server Error"}), 500
 
@@ -80,13 +81,17 @@ def send_message(room_id):
 
     logger.info("Got message from: %s to room: %s" % (sender_id, room_id))
 
-    # TODO: use pydantic to validate the message
-    json_message = json.dumps(
-        {"sender_id": sender_id, "timestamp": time.time(), "message": message}
-    )
-    message_id = redis.zadd(
-        "room:%s" % room_id, {json_message: time.time()}, nx=True
-    )
+    try:
+        user = User(name=sender_id)
+        ts = time.time()
+        msg = Message(sender_id=user.name, timestamp=ts, message=message)
+        message_id = redis.zadd(
+            "room:%s" % room_id, {json.dumps(msg.model_dump()): ts}, nx=True
+        )
+    except (ValidationError, RedisError, json.JSONDecodeError) as e:
+        logger.error("Error adding message to room: %s" % e)
+        return jsonify({"error": "Internal Server Error"}), 500
+
     return jsonify(message_id), 201
 
 
