@@ -16,7 +16,7 @@ async def connect():
     global room
     username = get_username()
     room = choose_room()
-    await sio.emit('join', {'username': username, 'room': str(room)})
+    await sio.emit('join', {'username': username, 'room': room})
 
 
 @sio.event
@@ -67,7 +67,7 @@ async def send_messages():
             new_message = await aioconsole.ainput("")
         except (EOFError, KeyboardInterrupt, asyncio.exceptions.CancelledError):
             break
-        data = {"username": username, "message": new_message, "room_id": str(room)}
+        data = {"username": username, "message": new_message, "room_id": room}
         await sio.emit("message", data)
 
         await asyncio.sleep(1)
