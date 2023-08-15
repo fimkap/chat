@@ -5,10 +5,14 @@ import time
 import json
 from .models import Message, ChatRoom, User
 from .logger import logger
+from .api import ChatAPI
+from .errors import ChatAPIError
 
 chat_bp = Blueprint("chat", __name__)
 
 redis = Redis(host="redis", port=6379)
+
+chat_api = ChatAPI(redis)
 
 
 @chat_bp.route("/rooms", methods=["GET"])
@@ -20,11 +24,10 @@ def get_rooms():
 
     """
     try:
-        rooms = redis.smembers("rooms")
-        rooms_decoded = [json.loads(room.decode("utf-8")) for room in rooms]
-        logger.info("Got %d chat rooms" % len(rooms_decoded))
-        return jsonify(rooms_decoded), 200
-    except (RedisError, json.JSONDecodeError) as e:
+        rooms = chat_api.get_rooms()
+        logger.info("Got %d chat rooms" % len(rooms))
+        return jsonify(rooms), 200
+    except (ChatAPIError, json.JSONDecodeError) as e:
         logger.error("Error getting chat rooms: %s" % e)
         return jsonify({"error": "Internal Server Error"}), 500
 
@@ -42,17 +45,13 @@ def join_room(room_id, user_id):
 
     """
     try:
-        if not redis.sismember("rooms_ids", room_id):
-            return jsonify({"error": "Room does not exist"}), 404
-
-        user = User(name=user_id)  # Validate user_id
-        redis.sadd("room:%s:users" % room_id, user.name)
-        logger.info("User %s joined room %s" % (user.name, room_id))
-    except (RedisError, ValidationError) as e:
+        chat_api.join_room(room_id, user_id)
+        logger.info("User %s joined room %s" % (user_id, room_id))
+        return jsonify({"success": True}), 201
+    except ChatAPIError as e:
         logger.error("Error joining room: %s" % e)
         return jsonify({"error": "Internal Server Error"}), 500
 
-    return jsonify({"success": True}), 201
 
 
 @chat_bp.route("/rooms/<room_id>/messages", methods=["POST"])
@@ -79,20 +78,13 @@ def send_message(room_id):
         logger.error("Error getting message from request body: %s" % e)
         return jsonify({"error": "Invalid request body format"}), 400
 
-    logger.info("Got message from: %s to room: %s" % (sender_id, room_id))
-
     try:
-        user = User(name=sender_id)
-        ts = time.time()
-        msg = Message(sender_id=user.name, timestamp=ts, message=message)
-        message_id = redis.zadd(
-            "room:%s" % room_id, {json.dumps(msg.model_dump()): ts}, nx=True
-        )
-    except (ValidationError, RedisError, json.JSONDecodeError) as e:
+        message_id = chat_api.send_message(room_id, sender_id, message)
+        logger.info("Got message from: %s to room: %s" % (sender_id, room_id))
+        return jsonify(message_id), 201
+    except ChatAPIError as e:
         logger.error("Error adding message to room: %s" % e)
         return jsonify({"error": "Internal Server Error"}), 500
-
-    return jsonify(message_id), 201
 
 
 @chat_bp.route("/rooms/<room_id>/messages", methods=["GET"])
@@ -110,11 +102,10 @@ def get_messages(room_id):
 
     """
     try:
-        messages = redis.zrange("room:%s" % room_id, 0, -1)
-        messages_decoded = [json.loads(message.decode("utf-8")) for message in messages]
-        logger.info("Got %d messages from room: %s" % (len(messages_decoded), room_id))
-        return jsonify(messages_decoded), 200
-    except (RedisError, json.JSONDecodeError) as e:
+        messages = chat_api.get_messages(room_id)
+        logger.info("Got %d messages from room: %s" % (len(messages), room_id))
+        return jsonify(messages), 200
+    except ChatAPIError as e:
         logger.error("Error getting messages from room: %s" % e)
         return jsonify({"error": "Internal Server Error"}), 500
 
