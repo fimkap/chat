@@ -63,10 +63,8 @@ async def get_messages(room_id):
 async def send_messages():
     """Send messages to the server. Input is taken from the console."""
     while True:
-        try:
-            new_message = await aioconsole.ainput("")
-        except (EOFError, KeyboardInterrupt, asyncio.exceptions.CancelledError):
-            break
+        new_message = await aioconsole.ainput("")
+        print("\033[A \033[A")
         data = {"username": username, "message": new_message, "room_id": room}
         await sio.emit("message", data)
 
@@ -92,14 +90,6 @@ def choose_room():
             return rooms_ids[room_id - 1]
         except (ValueError, IndexError):
             print("Invalid room id")
-
-
-# def join_room(room_id, username):
-#     try:
-#         response = requests.post(f"http://localhost:5002/rooms/{room_id}/users/{username}")
-#         response.raise_for_status()
-#     except requests.exceptions.HTTPError:
-#         print("Invalid response from server")
 
 
 def get_username():
