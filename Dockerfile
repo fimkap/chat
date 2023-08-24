@@ -1,10 +1,6 @@
-FROM python:3.9-slim-buster
+FROM python:3.11-alpine
 WORKDIR /app
-RUN apt-get update \
-  && apt-get -y install netcat gcc \
-  && apt-get clean
 COPY requirements.txt .
-RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY chat/. ./chat/
