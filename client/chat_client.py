@@ -1,22 +1,16 @@
-import asyncio
-import requests
-import aioconsole
-import os
 import socketio
+import requests
+import threading
 
-sio = socketio.AsyncClient()
+sio = socketio.Client()
 
 room = 0
 username = ""
 
 
 @sio.event
-async def connect():
-    global username
-    global room
-    username = get_username()
-    room = choose_room()
-    await sio.emit('join', {'username': username, 'room': room})
+def connect():
+    sio.emit('join', {'username': username, 'room': room})
 
 
 @sio.event
@@ -43,32 +37,13 @@ def error(data):
     print(f"Error: {data['data']}")
 
 
-async def get_messages(room_id):
+def get_username():
     while True:
-        os.system("clear")  # clear the terminal on update
-
-        try:
-            response = requests.get(f"http://localhost:5002/rooms/{room_id}/messages")
-            response.raise_for_status()
-
-            for item in response.json():
-                print(f"{item['sender_id']}: {item['message']}")
-        except (requests.exceptions.JSONDecodeError, KeyError) as e:
-            print(f"Invalid response from server: {e}")
-
-        print("New Message:")
-        await asyncio.sleep(3)
-
-
-async def send_messages():
-    """Send messages to the server. Input is taken from the console."""
-    while True:
-        new_message = await aioconsole.ainput("")
-        print("\033[A \033[A")
-        data = {"username": username, "message": new_message, "room_id": room}
-        await sio.emit("message", data)
-
-        await asyncio.sleep(1)
+        username = input("Enter your username: ")
+        if not username or len(username) < 3 or len(username) > 20:
+            print("Username must be between 3 and 20 characters")
+        else:
+            return username
 
 
 def choose_room():
@@ -92,28 +67,35 @@ def choose_room():
             print("Invalid room id")
 
 
-def get_username():
-    username = input("Enter your username: ")
-    if not username or len(username) < 3 or len(username) > 20:
-        print("Username must be between 3 and 20 characters")
-        return
-    return username
+def send_messages():
+    """Send messages to the server. Input is taken from the console."""
+    while True:
+        new_message = input("")
+        print("\033[A \033[A")  # clear the input line
+        data = {"username": username, "message": new_message, "room_id": room}
+        sio.emit("message", data)
 
 
-async def main():
+def main():
+    global username
+    global room
+    try:
+        username = get_username()
+        room = choose_room()
 
-    # websocket connection
-    await sio.connect("http://localhost:5002")
+        sio.connect("http://localhost:5002")
+        input_thread = threading.Thread(target=send_messages)
+        input_thread.daemon = True
+        input_thread.start()
 
-    tasks = [
-        # asyncio.create_task(get_messages(room_id)),
-        asyncio.create_task(send_messages()),
-    ]
+        sio_thread = threading.Thread(target=sio.wait)
+        sio_thread.start()
 
-    await asyncio.gather(*tasks)
-    await sio.wait()
+        input_thread.join()
+        sio_thread.join()
+    except KeyboardInterrupt:
+        sio.disconnect()
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    main()
