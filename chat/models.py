@@ -9,7 +9,9 @@ MAX_TOPIC_LEN = 24
 
 class User(BaseModel):
     name: str = Field(
-        min_length=MIN_SENDER_LEN, max_length=MAX_SENDER_LEN, pattern=r"^[a-zA-Z0-9_-]+$"
+        min_length=MIN_SENDER_LEN,
+        max_length=MAX_SENDER_LEN,
+        pattern=r"^[a-zA-Z0-9_-]+$",
     )
 
 
@@ -22,5 +24,7 @@ class Message(BaseModel):
 class ChatRoom(BaseModel):
     id: int
     topic: str = Field(
-        min_length=MIN_TOPIC_LEN, max_length=MAX_TOPIC_LEN, pattern=r"^[a-zA-Z0-9_]+$"
+        min_length=MIN_TOPIC_LEN,
+        max_length=MAX_TOPIC_LEN,
+        pattern=r"^[a-zA-Z0-9_]+$"
     )

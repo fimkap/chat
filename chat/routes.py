@@ -1,22 +1,20 @@
 from flask import jsonify, request, Blueprint
-from redis import Redis, RedisError
+from redis import Redis
 from pydantic import ValidationError
-from flask_socketio import emit, send
-import time
 import json
-from .models import Message, ChatRoom, User
+from .models import ChatRoom
 from .logger import logger
 from .api import ChatAPI
 from .errors import ChatAPIError
 
-chat_bp = Blueprint("chat", __name__)
+bp = Blueprint("chat", __name__)
 
 redis = Redis(host="redis", port=6379)
 
 chat_api = ChatAPI(redis)
 
 
-@chat_bp.route("/rooms", methods=["GET"])
+@bp.route("/rooms", methods=["GET"])
 def get_rooms():
     """Get all chat rooms.
 
@@ -33,7 +31,7 @@ def get_rooms():
         return jsonify({"error": "Internal Server Error"}), 500
 
 
-@chat_bp.route("/rooms/<room_id>/users/<user_id>", methods=["POST"])
+@bp.route("/rooms/<room_id>/users/<user_id>", methods=["POST"])
 def join_room(room_id, user_id):
     """Join a chat room.
 
@@ -54,8 +52,7 @@ def join_room(room_id, user_id):
         return jsonify({"error": "Internal Server Error"}), 500
 
 
-
-@chat_bp.route("/rooms/<room_id>/messages", methods=["POST"])
+@bp.route("/rooms/<room_id>/messages", methods=["POST"])
 def send_message(room_id):
     """Send a message to a chat room.
 
@@ -88,7 +85,7 @@ def send_message(room_id):
         return jsonify({"error": "Internal Server Error"}), 500
 
 
-@chat_bp.route("/rooms/<room_id>/messages", methods=["GET"])
+@bp.route("/rooms/<room_id>/messages", methods=["GET"])
 def get_messages(room_id):
     """Get all messages from a chat room.
 
