@@ -40,3 +40,17 @@
  a. Implement persistent connection.
  b. When one client sends a message, send push notification to all other clients in the same room.
 
+To use the chat:
+
+Run the backend:
+
+docker-compose up -d
+
+Run the client as many times as needed (not wrapped in a Docker container):
+
+python chat_client.py
+
+The client will prompt for a username, allow you to choose a chat room, and start chatting. Simply enter your text and press Enter. An empty message will result in an error.
+
+The client will download the chat room's history (in a real system, this would likely be limited).
+
