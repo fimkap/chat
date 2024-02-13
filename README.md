@@ -50,7 +50,10 @@ Run the client as many times as needed (not wrapped in a Docker container):
 
 python chat_client.py
 
+
 The client will prompt for a username, allow you to choose a chat room, and start chatting. Simply enter your text and press Enter. An empty message will result in an error.
 
 The client will download the chat room's history (in a real system, this would likely be limited).
+
+https://github.com/fimkap/chat/assets/2026502/6de58d98-c517-4708-bdc8-d37b5ce34e94
 
