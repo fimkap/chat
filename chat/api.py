@@ -42,12 +42,12 @@ class ChatAPI:
         """
         try:
             if not self.redis.sismember("rooms_ids", room_id):
-                raise ChatAPIError("Room does not exist")
+                raise ChatAPIError("Room does not exist", 404)
 
             user = User(name=user_id)  # Validate user_id
             self.redis.sadd("room:%s:users" % room_id, user.name)
         except (RedisError, ValidationError) as e:
-            raise ChatAPIError("Error joining room") from e
+            raise ChatAPIError("Error joining room", 422) from e
 
     def leave_room(self, room_id, user_id):
         """Leave a chat room.
@@ -92,7 +92,7 @@ class ChatAPI:
                 "room:%s" % room_id, {json.dumps(msg.model_dump()): ts}, nx=True
             )
         except (ValidationError, RedisError, json.JSONDecodeError) as e:
-            raise ChatAPIError("Error sending message") from e
+            raise ChatAPIError("Error sending message", 422) from e
 
         return message_id
 
@@ -114,4 +114,4 @@ class ChatAPI:
             messages_decoded = [json.loads(message.decode("utf-8")) for message in messages]
             return messages_decoded
         except (RedisError, json.JSONDecodeError) as e:
-            raise ChatAPIError("Error getting messages") from e
+            raise ChatAPIError("Error getting messages", 422) from e
