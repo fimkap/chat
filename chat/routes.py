@@ -28,7 +28,7 @@ def get_rooms():
         return jsonify(rooms), 200
     except (ChatAPIError) as e:
         logger.error("Error getting chat rooms: %s" % e)
-        return jsonify({"error": "Internal Server Error"}), e.get_status_code()
+        return jsonify({"error": "Error getting chat rooms"}), e.get_status_code()
 
 
 @bp.route("/rooms/<room_id>/users/<user_id>", methods=["POST"])
@@ -49,7 +49,7 @@ def join_room(room_id, user_id):
         return jsonify({"success": True}), 201
     except ChatAPIError as e:
         logger.error("Error joining room: %s" % e)
-        return jsonify({"error": "Internal Server Error"}), e.get_status_code()
+        return jsonify({"error": "Error joining room"}), e.get_status_code()
 
 
 @bp.route("/rooms/<room_id>/messages", methods=["POST"])
@@ -79,10 +79,10 @@ def send_message(room_id):
     try:
         message_id = chat_api.send_message(room_id, sender_id, message)
         logger.info("Got message from: %s to room: %s" % (sender_id, room_id))
-        return jsonify(message_id), 201
+        return jsonify(message_id), 200
     except ChatAPIError as e:
         logger.error("Error adding message to room: %s" % e)
-        return jsonify({"error": "Internal Server Error"}), e.get_status_code()
+        return jsonify({"error": "Error sending message"}), e.get_status_code()
 
 
 @bp.route("/rooms/<room_id>/messages", methods=["GET"])
@@ -105,7 +105,7 @@ def get_messages(room_id):
         return jsonify(messages), 200
     except ChatAPIError as e:
         logger.error("Error getting messages from room: %s" % e)
-        return jsonify({"error": "Internal Server Error"}), e.get_status_code()
+        return jsonify({"error": "Error getting messages from room"}), e.get_status_code()
 
 
 def init_rooms():
