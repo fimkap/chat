@@ -30,6 +30,23 @@ class TestChatAPI:
             self._init_rooms(redis)
             chat_api.join_room(1, "invalid!#name")
 
+    def test_register_and_login(self, chat_api):
+        chat_api.register_user("alice", "secret")
+        token = chat_api.login_user("alice", "secret")
+        assert isinstance(token, str)
+        username = chat_api.verify_token(token)
+        assert username == "alice"
+
+    def test_login_wrong_password(self, chat_api):
+        chat_api.register_user("bob", "pw1")
+        with pytest.raises(Exception):
+            chat_api.login_user("bob", "pw2")
+
+    def test_register_duplicate(self, chat_api):
+        chat_api.register_user("carol", "pw")
+        with pytest.raises(Exception):
+            chat_api.register_user("carol", "pw")
+
     def _init_rooms(self, redis):
         rooms = [
             ChatRoom(id=1, topic="cats"),

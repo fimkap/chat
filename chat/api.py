@@ -2,15 +2,66 @@ import json
 from redis import RedisError
 from pydantic import ValidationError
 import time
+import uuid
+import hashlib
 from .errors import ChatAPIError
 from .models import Message, ChatRoom, User
 
 
 class ChatAPI:
-    """ Internal Chat API."""
+    """Internal Chat API."""
 
     def __init__(self, redis):
         self.redis = redis
+
+    # ------------------------------------------------------------------
+    # User Authentication helpers
+    # ------------------------------------------------------------------
+
+    def register_user(self, username: str, password: str):
+        """Register a new user.
+
+        Args:
+            username: The user's name
+            password: The user's password
+
+        Raises:
+            ChatAPIError: If the user already exists or data is invalid
+        """
+        try:
+            user = User(name=username)
+            if self.redis.hexists("users", user.name):
+                raise ChatAPIError("User already exists", 400)
+            hashed = hashlib.sha256(password.encode()).hexdigest()
+            self.redis.hset("users", user.name, hashed)
+        except (RedisError, ValidationError) as e:
+            raise ChatAPIError("Error registering user", 422) from e
+
+    def login_user(self, username: str, password: str) -> str:
+        """Authenticate a user and return a token."""
+        try:
+            user = User(name=username)
+            stored = self.redis.hget("users", user.name)
+            if not stored:
+                raise ChatAPIError("Invalid credentials", 401)
+            hashed = hashlib.sha256(password.encode()).hexdigest()
+            if stored.decode("utf-8") != hashed:
+                raise ChatAPIError("Invalid credentials", 401)
+            token = str(uuid.uuid4())
+            self.redis.hset("tokens", token, user.name)
+            return token
+        except (RedisError, ValidationError) as e:
+            raise ChatAPIError("Error logging in", 401) from e
+
+    def verify_token(self, token: str) -> str:
+        """Return the username for an authentication token."""
+        try:
+            name = self.redis.hget("tokens", token)
+            if not name:
+                raise ChatAPIError("Unauthorized", 401)
+            return name.decode("utf-8")
+        except RedisError as e:
+            raise ChatAPIError("Unauthorized", 401) from e
 
     def get_rooms(self):
         """Get all chat rooms.
@@ -111,7 +162,9 @@ class ChatAPI:
         """
         try:
             messages = self.redis.zrange("room:%s" % room_id, 0, -1)
-            messages_decoded = [json.loads(message.decode("utf-8")) for message in messages]
+            messages_decoded = [
+                json.loads(message.decode("utf-8")) for message in messages
+            ]
             return messages_decoded
         except (RedisError, json.JSONDecodeError) as e:
             raise ChatAPIError("Error getting messages", 422) from e
