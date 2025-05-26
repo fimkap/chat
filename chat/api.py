@@ -1,5 +1,9 @@
 import json
-from redis import RedisError
+try:
+    from redis import RedisError
+except Exception:  # pragma: no cover - redis might not be installed
+    class RedisError(Exception):
+        pass
 from pydantic import ValidationError
 import time
 from .errors import ChatAPIError
@@ -89,7 +93,7 @@ class ChatAPI:
             ts = time.time()
             msg = Message(sender_id=user.name, timestamp=ts, message=message)
             message_id = self.redis.zadd(
-                "room:%s" % room_id, {json.dumps(msg.model_dump()): ts}, nx=True
+                "room:%s" % room_id, {json.dumps(msg.dict()): ts}, nx=True
             )
         except (ValidationError, RedisError, json.JSONDecodeError) as e:
             raise ChatAPIError("Error sending message", 422) from e
