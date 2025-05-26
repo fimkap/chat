@@ -14,6 +14,42 @@ redis = Redis(host="redis", port=6379)
 chat_api = ChatAPI(redis)
 
 
+@bp.route("/register", methods=["POST"])
+def register():
+    """Register a new user."""
+    try:
+        username = request.json["username"]
+        password = request.json["password"]
+    except (KeyError, TypeError):
+        return jsonify({"error": "Invalid request"}), 400
+
+    try:
+        chat_api.register_user(username, password)
+        logger.info("Registered user %s" % username)
+        return jsonify({"success": True}), 201
+    except ChatAPIError as e:
+        logger.error("Error registering user: %s" % e)
+        return jsonify({"error": str(e)}), e.get_status_code()
+
+
+@bp.route("/login", methods=["POST"])
+def login():
+    """Login a user and return a token."""
+    try:
+        username = request.json["username"]
+        password = request.json["password"]
+    except (KeyError, TypeError):
+        return jsonify({"error": "Invalid request"}), 400
+
+    try:
+        token = chat_api.login_user(username, password)
+        logger.info("User %s logged in" % username)
+        return jsonify({"token": token}), 200
+    except ChatAPIError as e:
+        logger.error("Error logging in: %s" % e)
+        return jsonify({"error": str(e)}), e.get_status_code()
+
+
 @bp.route("/rooms", methods=["GET"])
 def get_rooms():
     """Get all chat rooms.
@@ -26,7 +62,7 @@ def get_rooms():
         rooms = chat_api.get_rooms()
         logger.info("Got %d chat rooms" % len(rooms))
         return jsonify(rooms), 200
-    except (ChatAPIError) as e:
+    except ChatAPIError as e:
         logger.error("Error getting chat rooms: %s" % e)
         return jsonify({"error": "Error getting chat rooms"}), e.get_status_code()
 
@@ -43,7 +79,11 @@ def join_room(room_id, user_id):
         A JSON object containing a success message and a status code.
 
     """
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
     try:
+        authenticated = chat_api.verify_token(token)
+        if authenticated != user_id:
+            raise ChatAPIError("Unauthorized", 401)
         chat_api.join_room(room_id, user_id)
         logger.info("User %s joined room %s" % (user_id, room_id))
         return jsonify({"success": True}), 201
@@ -69,6 +109,7 @@ def send_message(room_id):
         A JSON object containing the message id and a status code.
 
     """
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
     try:
         sender_id = request.json["sender_id"]
         message = request.json["message"]
@@ -77,6 +118,9 @@ def send_message(room_id):
         return jsonify({"error": "Invalid request body format"}), 400
 
     try:
+        authenticated = chat_api.verify_token(token)
+        if authenticated != sender_id:
+            raise ChatAPIError("Unauthorized", 401)
         message_id = chat_api.send_message(room_id, sender_id, message)
         logger.info("Got message from: %s to room: %s" % (sender_id, room_id))
         return jsonify(message_id), 200
@@ -105,7 +149,10 @@ def get_messages(room_id):
         return jsonify(messages), 200
     except ChatAPIError as e:
         logger.error("Error getting messages from room: %s" % e)
-        return jsonify({"error": "Error getting messages from room"}), e.get_status_code()
+        return (
+            jsonify({"error": "Error getting messages from room"}),
+            e.get_status_code(),
+        )
 
 
 def init_rooms():
