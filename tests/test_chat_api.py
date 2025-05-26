@@ -1,10 +1,77 @@
 import json
+import os
+import sys
 import pytest
-from pytest_mock_resources import create_redis_fixture
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from chat.api import ChatAPI
 from chat.models import ChatRoom
 
-redis = create_redis_fixture()
+
+class FakeRedis:
+    def __init__(self):
+        self._sets = {}
+        self._zsets = {}
+
+    def flushdb(self):
+        self._sets.clear()
+        self._zsets.clear()
+
+    def _encode(self, value):
+        if isinstance(value, bytes):
+            return value
+        return str(value).encode("utf-8")
+
+    def sadd(self, key, *values):
+        s = self._sets.setdefault(key, set())
+        added = 0
+        for v in values:
+            ev = self._encode(v)
+            if ev not in s:
+                s.add(ev)
+                added += 1
+        return added
+
+    def smembers(self, key):
+        return set(self._sets.get(key, set()))
+
+    def sismember(self, key, value):
+        return self._encode(value) in self._sets.get(key, set())
+
+    def srem(self, key, *values):
+        s = self._sets.get(key, set())
+        removed = 0
+        for v in values:
+            ev = self._encode(v)
+            if ev in s:
+                s.remove(ev)
+                removed += 1
+        return removed
+
+    def zadd(self, key, mapping, nx=False):
+        z = self._zsets.setdefault(key, {})
+        added = 0
+        for member, score in mapping.items():
+            em = self._encode(member)
+            if nx and em in z:
+                continue
+            if em not in z:
+                added += 1
+            z[em] = score
+        return added
+
+    def zrange(self, key, start, end):
+        z = self._zsets.get(key, {})
+        sorted_members = [m for m, _ in sorted(z.items(), key=lambda kv: kv[1])]
+        if end == -1:
+            end = len(sorted_members) - 1
+        return [sorted_members[i] for i in range(start, min(end + 1, len(sorted_members)))]
+
+
+@pytest.fixture
+def redis():
+    return FakeRedis()
 
 
 class TestChatAPI:
@@ -54,5 +121,5 @@ class TestChatAPI:
             ChatRoom(id=3, topic="birds"),
         ]
         for room in rooms:
-            redis.sadd("rooms", json.dumps(room.model_dump()))
+            redis.sadd("rooms", json.dumps(room.dict()))
             redis.sadd("rooms_ids", room.id)

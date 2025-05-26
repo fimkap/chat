@@ -164,7 +164,7 @@ def init_rooms():
             ChatRoom(id=3, topic="birds"),
         ]
         for room in rooms:
-            redis.sadd("rooms", json.dumps(room.model_dump()))
+            redis.sadd("rooms", json.dumps(room.dict()))
             redis.sadd("rooms_ids", room.id)
         logger.info("Initialized chat rooms")
     except (ValidationError, json.JSONDecodeError) as e:
