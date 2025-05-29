@@ -1,7 +1,12 @@
 from flask_socketio import emit, join_room, leave_room, send
+from flask import request
+
 from .routes import chat_api
 from .logger import logger
 from .errors import ChatAPIError
+
+# Map a WebSocket session ID to the user and room that it joined.
+user_sessions = {}
 
 
 def handle_connect():
@@ -12,7 +17,13 @@ def handle_connect():
 
 def handle_disconnect():
     """Handle a socket disconnection."""
-    pass
+    info = user_sessions.pop(request.sid, None)
+    if info:
+        room = info["room"]
+        username = info["username"]
+        leave_room(room)
+        send(username + ' has left the room.', to=room)
+    logger.info("Client disconnected")
 
 
 def on_join(data):
@@ -20,6 +31,11 @@ def on_join(data):
     username = data['username']
     room = data['room']
     join_room(room)
+    # Track which user/room are associated with this connection
+    user_sessions[request.sid] = {
+        "username": username,
+        "room": room,
+    }
     send(username + ' has entered the room.', to=room)
     try:
         messages = chat_api.get_messages(room)
@@ -32,6 +48,8 @@ def on_leave(data):
     username = data['username']
     room = data['room']
     leave_room(room)
+    # Remove the session mapping if it matches this connection
+    user_sessions.pop(request.sid, None)
     send(username + ' has left the room.', to=room)
 
 
