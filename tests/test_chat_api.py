@@ -2,21 +2,24 @@ import json
 import os
 import sys
 import pytest
+from pydantic import ValidationError
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from chat.api import ChatAPI
-from chat.models import ChatRoom
+from chat.models import ChatRoom, User, Message
 
 
 class FakeRedis:
     def __init__(self):
         self._sets = {}
         self._zsets = {}
+        self._hashes = {}
 
     def flushdb(self):
         self._sets.clear()
         self._zsets.clear()
+        self._hashes.clear()
 
     def _encode(self, value):
         if isinstance(value, bytes):
@@ -68,6 +71,23 @@ class FakeRedis:
             end = len(sorted_members) - 1
         return [sorted_members[i] for i in range(start, min(end + 1, len(sorted_members)))]
 
+    def hexists(self, key, field):
+        h = self._hashes.get(key, {})
+        return self._encode(field) in h
+
+    def hset(self, key, field, value):
+        h = self._hashes.setdefault(key, {})
+        ef = self._encode(field)
+        ev = self._encode(value)
+        was_new = ef not in h
+        h[ef] = ev
+        return 1 if was_new else 0
+
+    def hget(self, key, field):
+        h = self._hashes.get(key, {})
+        ef = self._encode(field)
+        return h.get(ef)
+
 
 @pytest.fixture
 def redis():
@@ -114,6 +134,53 @@ class TestChatAPI:
         with pytest.raises(Exception):
             chat_api.register_user("carol", "pw")
 
+    def test_user_validation(self):
+        # Test valid user
+        user = User(name="valid_user")
+        assert user.name == "valid_user"
+        
+        # Test invalid user with special characters
+        with pytest.raises(ValidationError):
+            User(name="invalid!user")
+            
+        # Test user name too short
+        with pytest.raises(ValidationError):
+            User(name="ab")
+            
+        # Test user name too long
+        with pytest.raises(ValidationError):
+            User(name="a" * 20)
+
+    def test_message_validation(self):
+        # Test valid message
+        msg = Message(sender_id="test_user", timestamp=123.45, message="Hello world!")
+        assert msg.message == "Hello world!"
+        
+        # Test empty message
+        with pytest.raises(ValidationError):
+            Message(sender_id="test_user", timestamp=123.45, message="")
+            
+        # Test message too long
+        with pytest.raises(ValidationError):
+            Message(sender_id="test_user", timestamp=123.45, message="a" * 200)
+
+    def test_chatroom_validation(self):
+        # Test valid chat room
+        room = ChatRoom(id=1, topic="valid_topic")
+        assert room.topic == "valid_topic"
+        
+        # Test invalid topic with special characters
+        with pytest.raises(ValidationError):
+            ChatRoom(id=1, topic="invalid-topic!")
+            
+        # Test topic too short
+        with pytest.raises(ValidationError):
+            ChatRoom(id=1, topic="ab")
+            
+        # Test topic too long
+        with pytest.raises(ValidationError):
+            ChatRoom(id=1, topic="a" * 30)
+
     def _init_rooms(self, redis):
         rooms = [
             ChatRoom(id=1, topic="cats"),
@@ -121,5 +188,5 @@ class TestChatAPI:
             ChatRoom(id=3, topic="birds"),
         ]
         for room in rooms:
-            redis.sadd("rooms", json.dumps(room.dict()))
+            redis.sadd("rooms", json.dumps(room.model_dump()))
             redis.sadd("rooms_ids", room.id)

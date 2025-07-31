@@ -1,5 +1,5 @@
 Redis==3.5.3
-pydantic==2.1.1
+pydantic==2.10.3
 Flask==2.3.2
 Flask-SocketIO==5.3.5
 eventlet==0.33.3
