@@ -17,6 +17,7 @@ env/
 
 # Logs
 *.log
+logs/
 
 # Build artifacts
 build/
