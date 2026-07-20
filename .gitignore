@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenv
+.venv/
+venv/
+
+# Local runtime data (docker-compose bind mounts)
+logs/
+redis-data/
+
+# Claude Code local (personal) overrides — never commit
+.claude/settings.local.json
+
+# Env / secrets
+.env
