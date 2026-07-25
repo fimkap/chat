@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -13,10 +14,12 @@ class FakeRedis:
     def __init__(self):
         self._sets = {}
         self._zsets = {}
+        self._hashes = {}
 
     def flushdb(self):
         self._sets.clear()
         self._zsets.clear()
+        self._hashes.clear()
 
     def _encode(self, value):
         if isinstance(value, bytes):
@@ -48,6 +51,23 @@ class FakeRedis:
                 s.remove(ev)
                 removed += 1
         return removed
+
+    def hset(self, key, field, value):
+        h = self._hashes.setdefault(key, {})
+        ef = self._encode(field)
+        added = 0 if ef in h else 1
+        h[ef] = self._encode(value)
+        return added
+
+    def hget(self, key, field):
+        return self._hashes.get(key, {}).get(self._encode(field))
+
+    def hexists(self, key, field):
+        return self._encode(field) in self._hashes.get(key, {})
+
+    def hdel(self, key, *fields):
+        h = self._hashes.get(key, {})
+        return sum(h.pop(self._encode(f), None) is not None for f in fields)
 
     def zadd(self, key, mapping, nx=False):
         z = self._zsets.setdefault(key, {})
@@ -121,5 +141,5 @@ class TestChatAPI:
             ChatRoom(id=3, topic="birds"),
         ]
         for room in rooms:
-            redis.sadd("rooms", json.dumps(room.dict()))
+            redis.sadd("rooms", json.dumps(room.model_dump()))
             redis.sadd("rooms_ids", room.id)
