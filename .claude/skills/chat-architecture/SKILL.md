@@ -11,11 +11,12 @@ description: Architecture of the chat server — component responsibilities, the
 |------|----------------|
 | `app.py` | Entrypoint. Builds Flask app, registers the REST blueprint, wires SocketIO events, calls `init_rooms()`. |
 | `chat/api.py` | **`ChatAPI`** — all business logic and the only place that touches Redis. Auth, rooms, messages. |
-| `chat/routes.py` | Flask REST blueprint. Creates the module-level `Redis(host="redis")` and the shared `ChatAPI` singleton `chat_api`. |
+| `chat/routes.py` | Flask REST blueprint. Creates the module-level `Redis(host=REDIS_HOST, port=REDIS_PORT)` and the shared `ChatAPI` singleton `chat_api`. |
 | `chat/socket.py` | SocketIO handlers: connect/join/message/leave/disconnect. Reuses the same `chat_api`. Holds in-memory `user_sessions` ({sid → {username, room}}). |
 | `chat/models.py` | Pydantic models: `User` (name), `Message` (sender_id, timestamp, message), `ChatRoom` (id, topic). |
 | `chat/errors.py` | `ChatAPIError(message, status_code, original_exception)`. |
-| `chat/logger.py` | Logging → `/logs/app.log`. |
+| `chat/config.py` | Env-derived settings: Redis host/port, log dir/level, secret key, host/port, debug. |
+| `chat/logger.py` | Logging → stderr + `$CHAT_LOG_DIR/app.log` (default `logs/`). |
 | `client/chat_client.py` | CLI Socket.IO client (username → choose room → chat). |
 
 ## Redis key schema (reverse-engineered from `api.py`)
