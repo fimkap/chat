@@ -1,0 +1,4 @@
+# Dependencies for the CLI client (client/chat_client.py) only.
+# The server's own deps are in requirements.txt.
+python-socketio[client]==5.16.3
+requests==2.32.5
