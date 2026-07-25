@@ -1,6 +1,10 @@
-import socketio
-import requests
+import os
 import threading
+
+import requests
+import socketio
+
+SERVER_URL = os.environ.get("CHAT_SERVER_URL", "http://localhost:5002")
 
 sio = socketio.Client()
 
@@ -50,7 +54,7 @@ def choose_room():
     """Select a chat room on start. Send and see messages from this room."""
     rooms_ids = []
     try:
-        response = requests.get("http://localhost:5002/rooms")
+        response = requests.get(f"{SERVER_URL}/rooms", timeout=10)
         response.raise_for_status()
 
         for i, room in enumerate(response.json()):
@@ -70,7 +74,12 @@ def choose_room():
 def send_messages():
     """Send messages to the server. Input is taken from the console."""
     while True:
-        new_message = input("")
+        try:
+            new_message = input("")
+        except (EOFError, KeyboardInterrupt):
+            # Ctrl-D / Ctrl-C, or piped input running out: leave the room quietly.
+            sio.disconnect()
+            return
         print("\033[A \033[A")  # clear the input line
         data = {"username": username, "message": new_message, "room_id": room}
         sio.emit("message", data)
@@ -83,7 +92,7 @@ def main():
         username = get_username()
         room = choose_room()
 
-        sio.connect("http://localhost:5002")
+        sio.connect(SERVER_URL)
         input_thread = threading.Thread(target=send_messages)
         input_thread.daemon = True
         input_thread.start()
@@ -93,7 +102,8 @@ def main():
 
         input_thread.join()
         sio_thread.join()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
+        # Ctrl-C / Ctrl-D at one of the prompts.
         sio.disconnect()
 
 
