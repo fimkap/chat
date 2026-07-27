@@ -52,11 +52,25 @@ def get_username():
             return username
 
 
+def auth_headers():
+    """Return the Authorization header carrying the current token."""
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _server_error(response):
+    """Extract the server's error message from a failed response."""
+    try:
+        return response.json().get("error", response.reason)
+    except requests.exceptions.JSONDecodeError:
+        return response.reason
+
+
 def authenticate(username):
     """Log the user in (registering first if new) and return an auth token.
 
-    The server enforces authentication on the WebSocket handshake, so without a
-    valid token the client cannot join a room or send messages.
+    The server enforces authentication on the REST routes and on the WebSocket
+    handshake, so without a valid token the client cannot list rooms, join, or
+    send messages.
     """
     password = getpass.getpass("Enter your password: ")
 
@@ -71,38 +85,66 @@ def authenticate(username):
         response = login()
         if response.status_code == 401:
             # Unknown user: register, then log in.
-            requests.post(
+            registered = requests.post(
                 f"{SERVER_URL}/register",
                 json={"username": username, "password": password},
                 timeout=10,
             )
+            if registered.status_code != 201:
+                print(f"Registration failed: {_server_error(registered)}")
+                return None
             response = login()
     except requests.exceptions.RequestException as e:
         print(f"Could not reach server: {e}")
         return None
 
-    if response.status_code != 200:
-        print("Authentication failed")
+    if response.status_code == 429:
+        print("Too many attempts. Wait a minute and try again.")
         return None
+    if response.status_code != 200:
+        print(f"Authentication failed: {_server_error(response)}")
+        return None
+
     try:
-        return response.json()["token"]
+        body = response.json()
+        expires_in = body.get("expires_in")
+        if expires_in:
+            print(f"Logged in. Session expires after {expires_in // 60} min idle.")
+        return body["token"]
     except (requests.exceptions.JSONDecodeError, KeyError):
         print("Invalid response from server")
         return None
+
+
+def logout():
+    """Revoke the current token so it cannot be reused."""
+    if not token:
+        return
+    try:
+        requests.post(f"{SERVER_URL}/logout", headers=auth_headers(), timeout=10)
+    except requests.exceptions.RequestException:
+        # Best effort: the token still expires on its own.
+        pass
 
 
 def choose_room():
     """Select a chat room on start. Send and see messages from this room."""
     rooms_ids = []
     try:
-        response = requests.get(f"{SERVER_URL}/rooms", timeout=10)
+        response = requests.get(
+            f"{SERVER_URL}/rooms", headers=auth_headers(), timeout=10
+        )
         response.raise_for_status()
 
         for i, room in enumerate(response.json()):
             rooms_ids.append(room["id"])
             print(f"{i + 1}. {room['topic']}")
-    except (requests.exceptions.JSONDecodeError, KeyError):
+    except requests.exceptions.HTTPError as e:
+        print(f"Could not list rooms: {_server_error(e.response)}")
+        return None
+    except (requests.exceptions.RequestException, KeyError):
         print("Invalid response from server")
+        return None
 
     while True:
         try:
@@ -122,7 +164,9 @@ def send_messages():
             sio.disconnect()
             return
         print("\033[A \033[A")  # clear the input line
-        data = {"username": username, "message": new_message, "room_id": room}
+        # The server derives the sender from the connection's token; username is
+        # sent only for backwards compatibility and is ignored.
+        data = {"message": new_message, "room_id": room}
         sio.emit("message", data)
 
 
@@ -136,6 +180,8 @@ def main():
         if not token:
             return
         room = choose_room()
+        if room is None:
+            return
 
         sio.connect(SERVER_URL, auth={"token": token})
         input_thread = threading.Thread(target=send_messages)
@@ -147,9 +193,13 @@ def main():
 
         input_thread.join()
         sio_thread.join()
+    except socketio.exceptions.ConnectionError:
+        print("Could not connect: authentication rejected or server unavailable.")
     except (KeyboardInterrupt, EOFError):
         # Ctrl-C / Ctrl-D at one of the prompts.
         sio.disconnect()
+    finally:
+        logout()
 
 
 if __name__ == "__main__":

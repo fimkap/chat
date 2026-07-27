@@ -1,0 +1,20 @@
+# TLS overlay for the compose stack. Usage:
+#   ./scripts/gen-dev-certs.sh
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up --build
+# Then browse https://localhost (self-signed: expect a browser warning).
+#
+# The base stack stays plain HTTP so `docker compose up` works with no certs.
+services:
+  web:
+    environment:
+      # nginx terminates TLS and sets X-Forwarded-Proto; the app rejects
+      # anything that did not arrive over HTTPS.
+      CHAT_REQUIRE_HTTPS: '1'
+
+  nginx:
+    ports:
+      - '443:443'
+    volumes:
+      # Same target path as the base mount, so this replaces it.
+      - ./nginx.tls.conf:/etc/nginx/conf.d/default.conf
+      - ./certs:/etc/nginx/certs:ro
