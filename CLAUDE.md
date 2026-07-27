@@ -55,6 +55,8 @@ REDIS_HOST=localhost CHAT_PORT=5002 python app.py
 - **chat-style** — coding conventions and the inconsistencies to converge.
 - **chat-git** — commit/branch/PR conventions for this repo.
 - **chat-modernize** — the dependency-upgrade + cleanup playbook (the planned first project).
+- **chat-frontend** — the planned web UI and the design constraints it imposes
+  (keep REST routes browser-usable, CORS, socket auth handshake, token handling).
 
 ## Known state & backlog
 
@@ -80,7 +82,11 @@ Remaining backlog:
   socket tests. `pytest.raises(Exception)` in three tests should assert
   `ChatAPIError`.
 - **Auth is weak by design.** SHA-256 without a salt, UUID tokens with no
-  expiry, no auth on the socket handlers.
+  expiry. (Socket handlers now enforce token auth at connect time; the CLI
+  client logs in first — see `chat/socket.py` / `chat-frontend` skill.)
+- **Planned web UI** (see `chat-frontend`). Will drive the app over the REST API
+  + WebSocket, so keep REST routes browser-usable and don't retire the currently
+  unused messaging routes; CORS + token handling land with it.
 - **No CI.** Nothing runs `pytest`/`ruff` on push.
 - `chat/api.py` still carries a `try: from redis import RedisError` shim for
   environments without the redis package.

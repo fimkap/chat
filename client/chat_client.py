@@ -1,3 +1,4 @@
+import getpass
 import os
 import threading
 
@@ -10,6 +11,7 @@ sio = socketio.Client()
 
 room = 0
 username = ""
+token = ""
 
 
 @sio.event
@@ -50,6 +52,45 @@ def get_username():
             return username
 
 
+def authenticate(username):
+    """Log the user in (registering first if new) and return an auth token.
+
+    The server enforces authentication on the WebSocket handshake, so without a
+    valid token the client cannot join a room or send messages.
+    """
+    password = getpass.getpass("Enter your password: ")
+
+    def login():
+        return requests.post(
+            f"{SERVER_URL}/login",
+            json={"username": username, "password": password},
+            timeout=10,
+        )
+
+    try:
+        response = login()
+        if response.status_code == 401:
+            # Unknown user: register, then log in.
+            requests.post(
+                f"{SERVER_URL}/register",
+                json={"username": username, "password": password},
+                timeout=10,
+            )
+            response = login()
+    except requests.exceptions.RequestException as e:
+        print(f"Could not reach server: {e}")
+        return None
+
+    if response.status_code != 200:
+        print("Authentication failed")
+        return None
+    try:
+        return response.json()["token"]
+    except (requests.exceptions.JSONDecodeError, KeyError):
+        print("Invalid response from server")
+        return None
+
+
 def choose_room():
     """Select a chat room on start. Send and see messages from this room."""
     rooms_ids = []
@@ -88,11 +129,15 @@ def send_messages():
 def main():
     global username
     global room
+    global token
     try:
         username = get_username()
+        token = authenticate(username)
+        if not token:
+            return
         room = choose_room()
 
-        sio.connect(SERVER_URL)
+        sio.connect(SERVER_URL, auth={"token": token})
         input_thread = threading.Thread(target=send_messages)
         input_thread.daemon = True
         input_thread.start()
