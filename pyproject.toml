@@ -1,0 +1,12 @@
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+# Baseline that the code passes today. The style-convergence phase should add
+# "UP" (% formatting → f-strings), "B", and "G" (lazy logging args).
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -3,15 +3,25 @@ services:
     build: .
     ports:
       - '5002:5002'
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      CHAT_LOG_DIR: /logs
     volumes:
       - ./logs:/logs
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
   redis:
     image: redis:latest
     volumes:
       - ./redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 15
 
   nginx:
     image: nginx:latest

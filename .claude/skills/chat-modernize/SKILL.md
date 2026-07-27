@@ -6,8 +6,33 @@ description: Playbook for upgrading the chat project's dependencies to current v
 # Chat — Modernization Playbook
 
 The stated goal for this repo: bring dependencies to current versions, then
-improve the code. This skill is the map. **Nothing here is done yet** — it's the
-plan.
+improve the code. This skill is the map.
+
+## Status — pass 1 done (2026-07-25)
+
+Dependencies and launchability are **done**; the "improve the code" phase is not.
+
+- Pydantic v2 idioms fixed (`pattern=`, `.model_dump()`); suite green after
+  adding hash ops (`hset`/`hget`/`hexists`/`hdel`) to `FakeRedis`.
+- Pins now: redis 8.0.1, pydantic 2.13.4, Flask 3.1.3, Flask-SocketIO 5.6.1,
+  python-socketio 5.16.3, simple-websocket 1.1.0, gunicorn 26.0.0.
+  `requirements-dev.txt` adds pytest 9.1.1 + ruff 0.16.0 + client deps.
+- **eventlet is gone.** `async_mode="threading"` + `simple-websocket`, served by
+  gunicorn `--worker-class gthread --threads 100 -w 1`. Docker base image is
+  `python:3.13-slim`.
+- Config is env-driven (`chat/config.py`); `logger.py` logs to stderr plus
+  `$CHAT_LOG_DIR/app.log`; nginx proxies `web:5002` with WebSocket upgrade;
+  compose waits on a redis healthcheck.
+- `pyproject.toml` added with ruff (`E4,E7,E9,F,I`) + pytest config.
+
+**Verified:** `pytest -q` (7 passed), `ruff check .` clean, and REST + WebSocket
+smoke tests (two clients, join/message/leave, transport == `websocket`) against
+`:5002`, through nginx `:80`, and against a local `python app.py` run.
+
+Still open: style convergence (`UP`/`B`/`G` rules — % formatting, lazy logging,
+type hints), Flask `test_client` + socket tests, real auth hardening, CI.
+
+The rest of this file is the original plan, kept for the per-library notes.
 
 ## Order of operations
 

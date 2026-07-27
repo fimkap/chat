@@ -11,7 +11,7 @@ class User(BaseModel):
     name: constr(
         min_length=MIN_SENDER_LEN,
         max_length=MAX_SENDER_LEN,
-        regex=r"^[a-zA-Z0-9_-]+$",
+        pattern=r"^[a-zA-Z0-9_-]+$",
     )
 
 
@@ -26,5 +26,5 @@ class ChatRoom(BaseModel):
     topic: constr(
         min_length=MIN_TOPIC_LEN,
         max_length=MAX_TOPIC_LEN,
-        regex=r"^[a-zA-Z0-9_]+$",
+        pattern=r"^[a-zA-Z0-9_]+$",
     )

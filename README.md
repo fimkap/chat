@@ -40,18 +40,66 @@
  a. Implement persistent connection.
  b. When one client sends a message, send push notification to all other clients in the same room.
 
-To use the chat:
+## Using the chat
 
-Run the backend:
+### 1. Start the backend
 
-docker-compose up -d
+```bash
+docker compose up -d --build
+```
 
-Run the client as many times as needed (not wrapped in a Docker container):
+The server listens on `http://localhost:5002` directly, and on
+`http://localhost` (port 80) through nginx. Redis and its data volume come up
+with it.
 
-python chat_client.py
+### 2. Set up a Python env for the client
 
+The client is **not** wrapped in a Docker container, so it needs its own Python
+environment. It requires two packages — `python-socketio[client]` and
+`requests` — listed in `requirements-client.txt`. Without them you get
+`ModuleNotFoundError: No module named 'socketio'`.
 
-The client will prompt for a username, allow you to choose a chat room, and start chatting. Simply enter your text and press Enter. An empty message will result in an error.
+From the repo root (Python 3.10+):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-client.txt
+```
+
+Notes:
+
+- On Debian/Ubuntu, `python3 -m venv` needs the `python3-venv` system package
+  (`sudo apt install python3-venv`). If you'd rather not install it,
+  [`uv`](https://docs.astral.sh/uv/) works without root:
+  `uv venv .venv && VIRTUAL_ENV=.venv uv pip install -r requirements-client.txt`.
+- `requirements.txt` is the **server's** dependency list (what the Docker image
+  installs) — it does not include the client's.
+- Working on the server itself? `pip install -r requirements-dev.txt` gets
+  everything: server, client, pytest and ruff.
+
+### 3. Run the client
+
+With the env activated:
+
+```bash
+python client/chat_client.py      # from the repo root
+# or:  cd client && python chat_client.py
+```
+
+If you skipped activating the env, call its interpreter directly:
+`.venv/bin/python client/chat_client.py`.
+
+Run it as many times as you like (separate terminals) to chat between users.
+
+The client talks to `http://localhost:5002` by default. Point it elsewhere —
+e.g. through nginx, or at another host — with `CHAT_SERVER_URL`:
+
+```bash
+CHAT_SERVER_URL=http://localhost python client/chat_client.py
+```
+
+The client will prompt for a username, allow you to choose a chat room, and start chatting. Simply enter your text and press Enter. An empty message will result in an error. Ctrl-C or Ctrl-D leaves the room and exits.
 
 The client will download the chat room's history (in a real system, this would likely be limited).
 

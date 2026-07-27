@@ -1,9 +1,9 @@
-from flask_socketio import emit, join_room, leave_room, send
 from flask import request
+from flask_socketio import emit, join_room, leave_room, send
 
-from .routes import chat_api
-from .logger import logger
 from .errors import ChatAPIError
+from .logger import logger
+from .routes import chat_api
 
 # Map a WebSocket session ID to the user and room that it joined.
 user_sessions = {}

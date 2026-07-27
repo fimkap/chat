@@ -8,24 +8,27 @@ description: Run and debug the chat server — the docker-compose stack, local-r
 ## Full stack
 
 ```bash
-docker-compose up --build
-# web (gunicorn + eventlet) on :5002, redis, nginx on :80
+docker compose up --build
+# web (gunicorn gthread + simple-websocket) on :5002, redis, nginx on :80
 ```
 
-> ⚠️ `nginx.conf` proxies to `web:5000` but the server binds `:5002`, so nginx
-> routing is currently broken. Hit the server directly on `:5002`.
+Both entrypoints work: `http://localhost:5002` direct, or `http://localhost`
+through nginx (which forwards WebSocket upgrades).
 
 ## Run locally (outside Docker)
 
-Two things assume the compose network:
+Only a reachable Redis is required; the rest is env-driven (`chat/config.py`):
 
-- `logger.py` → `/logs/app.log`. Create it first:
-  `sudo mkdir -p /logs && sudo chown "$USER" /logs` (or edit the path).
-- `routes.py` → `Redis(host="redis")`. Start a local Redis
-  (`docker run -p 6379:6379 redis`) and point the client at `localhost`.
+```bash
+docker run --rm -d -p 6379:6379 redis
+REDIS_HOST=localhost python app.py                      # Flask dev server, :5002
+# or:
+REDIS_HOST=localhost gunicorn --worker-class gthread --threads 100 -w 1 \
+  --bind :5002 app:app
+```
 
-Then: `python app.py` (Flask dev server) or
-`gunicorn --worker-class eventlet -w 1 --bind :5002 app:app`.
+Env vars: `REDIS_HOST`, `REDIS_PORT`, `CHAT_LOG_DIR` (empty → stderr only),
+`CHAT_LOG_LEVEL`, `CHAT_SECRET_KEY`, `CHAT_HOST`, `CHAT_PORT`, `CHAT_DEBUG`.
 
 ## Exercise the REST API
 
@@ -46,11 +49,16 @@ curl -s $BASE/rooms/1/messages
 ## Drive the socket client
 
 ```bash
-python client/chat_client.py   # prompts for username + room; talks to localhost:5002
+python client/chat_client.py                       # prompts for username + room
+CHAT_SERVER_URL=http://localhost python client/chat_client.py   # via nginx
 ```
+
+Client deps are in `requirements-client.txt` (not `requirements.txt`). Ctrl-C /
+Ctrl-D — or piped stdin running out — disconnects and exits cleanly.
 
 ## Logs & Redis
 
-- Logs: `./logs/app.log` (mounted volume) or `/logs/app.log` inside the container.
-- Inspect Redis: `docker-compose exec redis redis-cli` → then e.g.
+- Logs: stderr (`docker compose logs -f web`) plus `./logs/app.log` (mounted
+  volume; `/logs/app.log` inside the container).
+- Inspect Redis: `docker compose exec redis redis-cli` → then e.g.
   `KEYS *`, `HGETALL users`, `SMEMBERS rooms`, `ZRANGE room:1 0 -1`.

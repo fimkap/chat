@@ -1,15 +1,18 @@
-from flask import jsonify, request, Blueprint
-from redis import Redis
-from pydantic import ValidationError
 import json
-from .models import ChatRoom
-from .logger import logger
+
+from flask import Blueprint, jsonify, request
+from pydantic import ValidationError
+from redis import Redis, RedisError
+
 from .api import ChatAPI
+from .config import REDIS_HOST, REDIS_PORT
 from .errors import ChatAPIError
+from .logger import logger
+from .models import ChatRoom
 
 bp = Blueprint("chat", __name__)
 
-redis = Redis(host="redis", port=6379)
+redis = Redis(host=REDIS_HOST, port=REDIS_PORT)
 
 chat_api = ChatAPI(redis)
 
@@ -164,8 +167,9 @@ def init_rooms():
             ChatRoom(id=3, topic="birds"),
         ]
         for room in rooms:
-            redis.sadd("rooms", json.dumps(room.dict()))
+            redis.sadd("rooms", json.dumps(room.model_dump()))
             redis.sadd("rooms_ids", room.id)
         logger.info("Initialized chat rooms")
-    except (ValidationError, json.JSONDecodeError) as e:
-        logger.error("Error initializing chat rooms: %s" % e)
+    except (ValidationError, json.JSONDecodeError, RedisError) as e:
+        # Don't take the whole app down if Redis isn't reachable yet.
+        logger.error("Error initializing chat rooms: %s", e)

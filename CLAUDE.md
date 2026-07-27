@@ -22,10 +22,12 @@ push) — see [README.md](README.md) for the spec. Data models use **Pydantic**.
     in-memory `user_sessions: {sid -> {username, room}}`.
   - `models.py` — Pydantic models: `User`, `Message`, `ChatRoom`.
   - `errors.py` — `ChatAPIError` (carries an HTTP status code).
-  - `logger.py` — logging config (writes to `/logs/app.log`).
+  - `config.py` — env-derived settings (Redis host/port, log dir/level, host/port).
+  - `logger.py` — logging config (stderr + `$CHAT_LOG_DIR/app.log`).
 - `client/chat_client.py` — CLI Socket.IO client.
 - `tests/test_chat_api.py` — pytest suite against `ChatAPI` using an in-file `FakeRedis`.
-- `Dockerfile`, `docker-compose.yml` (web + redis + nginx), `nginx.conf`, `requirements.txt`.
+- `Dockerfile`, `docker-compose.yml` (web + redis + nginx), `nginx.conf`,
+  `requirements.txt` / `requirements-dev.txt`, `pyproject.toml` (ruff + pytest config).
 
 Full component + Redis data-model map: **`chat-architecture` skill**.
 
@@ -34,10 +36,14 @@ Full component + Redis data-model map: **`chat-architecture` skill**.
 Details in the `chat-setup` and `chat-debug` skills. Quick reference:
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate   # create env
-pip install -r requirements.txt pytest          # install (pytest is not in requirements)
-pytest tests/ -q                                 # run tests
-docker-compose up --build                        # full stack: web:5002, redis, nginx:80
+python3 -m venv .venv && . .venv/bin/activate   # create env (or: uv venv .venv)
+pip install -r requirements-dev.txt              # runtime + pytest/ruff + client deps
+pytest -q                                        # run tests
+ruff check .                                     # lint
+docker compose up --build                        # full stack: web:5002, redis, nginx:80
+
+# Local run (no Docker) — needs a reachable Redis:
+REDIS_HOST=localhost CHAT_PORT=5002 python app.py
 ```
 
 ## Skills (`.claude/skills/`)
@@ -50,26 +56,34 @@ docker-compose up --build                        # full stack: web:5002, redis, 
 - **chat-git** — commit/branch/PR conventions for this repo.
 - **chat-modernize** — the dependency-upgrade + cleanup playbook (the planned first project).
 
-## Known state & backlog (as of setup)
+## Known state & backlog
 
-> ⚠️ **The repo is not runnable as-is.** Fixing this is item #1.
+**The repo runs.** Modernization pass 1 (2026-07-25) fixed the Pydantic v1/v2
+mismatch, bumped every pin to current, and made the app launchable both in
+compose and locally. Verified: `pytest` green, `ruff check` clean, REST +
+WebSocket exercised through `:5002` and through nginx `:80`.
 
-- **Pydantic v1 code on a v2 pin.** `models.py` uses `constr(regex=...)` and
-  `.dict()` (Pydantic v1 idioms), but `requirements.txt` pins `pydantic==2.1.1`.
-  Importing `chat.models` raises
-  `TypeError: constr() got an unexpected keyword argument 'regex'`, so **the app
-  won't start and every test errors at collection.** Fix: `regex=` → `pattern=`,
-  `.dict()` → `.model_dump()`.
-- **Stale pins.** All dependencies are old (Flask 2.3, redis 3.5, eventlet 0.33,
-  Flask-SocketIO 5.3, gunicorn 21). Upgrading to current versions is the planned
-  first project; note `redis` 3.5→5.x and Flask/Werkzeug have API/behavior changes.
-- **Local-run friction.** `logger.py` writes to `/logs/app.log` (absolute path)
-  and `routes.py` hardcodes `Redis(host="redis")` — both assume the compose
-  network. Running outside Docker needs a writable `/logs` and a reachable Redis.
-- **nginx port mismatch.** `nginx.conf` proxies to `web:5000`, but the server
-  binds `:5002`.
-- **Missing hygiene.** No `.gitignore`, no dev-requirements, no linter/formatter
-  config, no CI.
+Configuration is env-driven via `chat/config.py`: `REDIS_HOST`/`REDIS_PORT`,
+`CHAT_LOG_DIR` (empty → stderr only), `CHAT_LOG_LEVEL`, `CHAT_SECRET_KEY`,
+`CHAT_HOST`/`CHAT_PORT`, `CHAT_DEBUG`; the CLI client reads `CHAT_SERVER_URL`.
+
+**Async mode is now `threading` + `simple-websocket`** (no eventlet/gevent
+monkey-patching); gunicorn runs the `gthread` worker with one worker process.
+Socket.IO needs a message queue before scaling past `-w 1`.
+
+Remaining backlog:
+
+- **Style convergence** (see `chat-style`): `%` formatting → f-strings, eager →
+  lazy logging args, complete type hints. `pyproject.toml` notes the ruff rule
+  sets (`UP`, `B`, `G`) to enable when that lands.
+- **Test coverage.** Only `ChatAPI` is unit-tested; no Flask `test_client` or
+  socket tests. `pytest.raises(Exception)` in three tests should assert
+  `ChatAPIError`.
+- **Auth is weak by design.** SHA-256 without a salt, UUID tokens with no
+  expiry, no auth on the socket handlers.
+- **No CI.** Nothing runs `pytest`/`ruff` on push.
+- `chat/api.py` still carries a `try: from redis import RedisError` shim for
+  environments without the redis package.
 
 ## Conventions
 
